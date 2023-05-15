@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>sanittestreport.html</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) { // eslint-disable-line no-redeclare
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function findAll(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sortColumn(elem) {
+    toggleSortStates(elem);
+    const colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    let key;
+    if (elem.classList.contains('result')) {
+        key = keyResult;
+    } else if (elem.classList.contains('links')) {
+        key = keyLink;
+    } else {
+        key = keyAlpha;
+    }
+    sortTable(elem, key(colIndex));
+}
+
+function showAllExtras() { // eslint-disable-line no-unused-vars
+    findAll('.col-result').forEach(showExtras);
+}
+
+function hideAllExtras() { // eslint-disable-line no-unused-vars
+    findAll('.col-result').forEach(hideExtras);
+}
+
+function showExtras(colresultElem) {
+    const extras = colresultElem.parentNode.nextElementSibling;
+    const expandcollapse = colresultElem.firstElementChild;
+    extras.classList.remove('collapsed');
+    expandcollapse.classList.remove('expander');
+    expandcollapse.classList.add('collapser');
+}
+
+function hideExtras(colresultElem) {
+    const extras = colresultElem.parentNode.nextElementSibling;
+    const expandcollapse = colresultElem.firstElementChild;
+    extras.classList.add('collapsed');
+    expandcollapse.classList.remove('collapser');
+    expandcollapse.classList.add('expander');
+}
+
+function showFilters() {
+    let visibleString = getQueryParameter('visible') || 'all';
+    visibleString = visibleString.toLowerCase();
+    const checkedItems = visibleString.split(',');
+
+    const filterItems = document.getElementsByClassName('filter');
+    for (let i = 0; i < filterItems.length; i++) {
+        filterItems[i].hidden = false;
+
+        if (visibleString != 'all') {
+            filterItems[i].checked = checkedItems.includes(filterItems[i].getAttribute('data-test-result'));
+            filterTable(filterItems[i]);
+        }
+    }
+}
+
+function addCollapse() {
+    // Add links for show/hide all
+    const resulttable = find('table#results-table');
+    const showhideall = document.createElement('p');
+    showhideall.innerHTML = '<a href="javascript:showAllExtras()">Show all details</a> / ' +
+                            '<a href="javascript:hideAllExtras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    findAll('.col-result').forEach(function(elem) {
+        const collapsed = getQueryParameter('collapsed') || 'Passed';
+        const extras = elem.parentNode.nextElementSibling;
+        const expandcollapse = document.createElement('span');
+        if (extras.classList.contains('collapsed')) {
+            expandcollapse.classList.add('expander');
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add('collapsed');
+            expandcollapse.classList.add('expander');
+        } else {
+            expandcollapse.classList.add('collapser');
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener('click', function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains('collapsed')) {
+                showExtras(event.currentTarget);
+            } else {
+                hideExtras(event.currentTarget);
+            }
+        });
+    });
+}
+
+function getQueryParameter(name) {
+    const match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () { // eslint-disable-line no-unused-vars
+    resetSortHeaders();
+
+    addCollapse();
+
+    showFilters();
+
+    sortColumn(find('.initial-sort'));
+
+    findAll('.sortable').forEach(function(elem) {
+        elem.addEventListener('click',
+            function() {
+                sortColumn(elem);
+            }, false);
+    });
+}
+
+function sortTable(clicked, keyFunc) {
+    const rows = findAll('.results-table-row');
+    const reversed = !clicked.classList.contains('asc');
+    const sortedRows = sort(rows, keyFunc, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    const thead = document.getElementById('results-table-head');
+    document.getElementById('results-table').remove();
+    const parent = document.createElement('table');
+    parent.id = 'results-table';
+    parent.appendChild(thead);
+    sortedRows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName('BODY')[0].appendChild(parent);
+}
+
+function sort(items, keyFunc, reversed) {
+    const sortArray = items.map(function(item, i) {
+        return [keyFunc(item), i];
+    });
+
+    sortArray.sort(function(a, b) {
+        const keyA = a[0];
+        const keyB = b[0];
+
+        if (keyA == keyB) return 0;
+
+        if (reversed) {
+            return keyA < keyB ? 1 : -1;
+        } else {
+            return keyA > keyB ? 1 : -1;
+        }
+    });
+
+    return sortArray.map(function(item) {
+        const index = item[1];
+        return items[index];
+    });
+}
+
+function keyAlpha(colIndex) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[colIndex].firstChild.data.toLowerCase();
+    };
+}
+
+function keyLink(colIndex) {
+    return function(elem) {
+        const dataCell = elem.childNodes[1].childNodes[colIndex].firstChild;
+        return dataCell == null ? '' : dataCell.innerText.toLowerCase();
+    };
+}
+
+function keyResult(colIndex) {
+    return function(elem) {
+        const strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+            'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[colIndex].firstChild.data);
+    };
+}
+
+function resetSortHeaders() {
+    findAll('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    findAll('.sortable').forEach(function(elem) {
+        const icon = document.createElement('div');
+        icon.className = 'sort-icon';
+        icon.textContent = 'vvv';
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove('desc', 'active');
+        elem.classList.add('asc', 'inactive');
+    });
+}
+
+function toggleSortStates(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        resetSortHeaders();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function isAllRowsHidden(value) {
+    return value.hidden == false;
+}
+
+function filterTable(elem) { // eslint-disable-line no-unused-vars
+    const outcomeAtt = 'data-test-result';
+    const outcome = elem.getAttribute(outcomeAtt);
+    const classOutcome = outcome + ' results-table-row';
+    const outcomeRows = document.getElementsByClassName(classOutcome);
+
+    for(let i = 0; i < outcomeRows.length; i++){
+        outcomeRows[i].hidden = !elem.checked;
+    }
+
+    const rows = findAll('.results-table-row').filter(isAllRowsHidden);
+    const allRowsHidden = rows.length == 0 ? true : false;
+    const notFoundMessage = document.getElementById('not-found-message');
+    notFoundMessage.hidden = !allRowsHidden;
+}
+</script>
+    <h1>sanittestreport.html</h1>
+    <p>Report generated on 12-May-2023 at 13:59:09 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v3.2.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Environment</td>
+        <td>Test</td></tr>
+      <tr>
+        <td>Module Name</td>
+        <td>Employee</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19045-SP0</td></tr>
+      <tr>
+        <td>Project Name</td>
+        <td>OrangHRM</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.11.3</td></tr>
+      <tr>
+        <td>Tester</td>
+        <td>Credence</td></tr></table>
+    <h2>Summary</h2>
+    <p>4 tests ran in 32.51 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="passed">3 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="failed">1 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filterTable(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable" col="duration">Duration</th>
+          <th class="sortable links" col="links">Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testCases/test_empsearch.py::Test_Search_Emp::test_searchEmp_005</td>
+          <td class="col-duration">27.16</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">[gw3] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/>[gw3] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw3] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/><br/>self = &lt;testCases.test_empsearch.Test_Search_Emp object at 0x0000024B81279990&gt;<br/>setup = &lt;selenium.webdriver.chrome.webdriver.WebDriver (session=&quot;fe24f590112278b4ac47a4fb22dc8be9&quot;)&gt;<br/><br/>    @pytest.mark.sanity<br/>    def test_searchEmp_005(self, setup):<br/>        self.log.info(&quot;test_searchEmp_005 is started&quot;)<br/>        self.driver = setup<br/>        self.log.info(&quot;Opening Browser&quot;)<br/>        self.driver.get(self.Url)<br/>        self.log.info(&quot;Going to Url--&gt;&quot; + self.Url)<br/>        self.lp = loginpage(self.driver)<br/>        self.lp.Enter_UserName(self.username)<br/>        self.log.info(&quot;Entering UserName--&gt;&quot; + self.username)<br/>        self.lp.Enter_Password(self.password)<br/>        self.log.info(&quot;Entering password--&gt;&quot; + self.password)<br/>        self.lp.Click_Login()<br/>        self.log.info(&quot;Click On login&quot;)<br/>        self.ae = AddEmployee(self.driver)<br/>        self.ae.Click_PIM()<br/>        self.log.info(&quot;Click On PIM&quot;)<br/>        self.es = EmployeeSearch(self.driver)<br/>&gt;       self.es.Enter_EmpName(&quot;David&quot;)<br/><br/>testCases\test_empsearch.py:42: <br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/>pageObjects\EmployeeSearchPage.py:16: in Enter_EmpName<br/>    element = WebDriverWait(self.driver, 10).until(<br/>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ <br/><br/>self = &lt;selenium.webdriver.support.wait.WebDriverWait (session=&quot;fe24f590112278b4ac47a4fb22dc8be9&quot;)&gt;<br/>method = &lt;function presence_of_element_located.&lt;locals&gt;._predicate at 0x0000024B812A4360&gt;, message = &#x27;&#x27;<br/><br/>    def until(self, method, message: str = &quot;&quot;):<br/>        &quot;&quot;&quot;Calls the method provided with the driver as an argument until the \<br/>        return value does not evaluate to ``False``.<br/>    <br/>        :param method: callable(WebDriver)<br/>        :param message: optional message for :exc:`TimeoutException`<br/>        :returns: the result of the last call to `method`<br/>        :raises: :exc:`selenium.common.exceptions.TimeoutException` if timeout occurs<br/>        &quot;&quot;&quot;<br/>        screen = None<br/>        stacktrace = None<br/>    <br/>        end_time = time.monotonic() + self._timeout<br/>        while True:<br/>            try:<br/>                value = method(self._driver)<br/>                if value:<br/>                    return value<br/>            except self._ignored_exceptions as exc:<br/>                screen = getattr(exc, &quot;screen&quot;, None)<br/>                stacktrace = getattr(exc, &quot;stacktrace&quot;, None)<br/>            time.sleep(self._poll)<br/>            if time.monotonic() &gt; end_time:<br/>                break<br/>&gt;       raise TimeoutException(message, screen, stacktrace)<br/><span class="error">E       selenium.common.exceptions.TimeoutException: Message: </span><br/><span class="error">E       Stacktrace:</span><br/><span class="error">E       Backtrace:</span><br/><span class="error">E       	GetHandleVerifier [0x005D8893+48451]</span><br/><span class="error">E       	(No symbol) [0x0056B8A1]</span><br/><span class="error">E       	(No symbol) [0x00475058]</span><br/><span class="error">E       	(No symbol) [0x004A0467]</span><br/><span class="error">E       	(No symbol) [0x004A069B]</span><br/><span class="error">E       	(No symbol) [0x004CDD92]</span><br/><span class="error">E       	(No symbol) [0x004BA304]</span><br/><span class="error">E       	(No symbol) [0x004CC482]</span><br/><span class="error">E       	(No symbol) [0x004BA0B6]</span><br/><span class="error">E       	(No symbol) [0x00497E08]</span><br/><span class="error">E       	(No symbol) [0x00498F2D]</span><br/><span class="error">E       	GetHandleVerifier [0x00838E3A+2540266]</span><br/><span class="error">E       	GetHandleVerifier [0x00878959+2801161]</span><br/><span class="error">E       	GetHandleVerifier [0x0087295C+2776588]</span><br/><span class="error">E       	GetHandleVerifier [0x00662280+612144]</span><br/><span class="error">E       	(No symbol) [0x00574F6C]</span><br/><span class="error">E       	(No symbol) [0x005711D8]</span><br/><span class="error">E       	(No symbol) [0x005712BB]</span><br/><span class="error">E       	(No symbol) [0x00564857]</span><br/><span class="error">E       	BaseThreadInitThunk [0x76CF00C9+25]</span><br/><span class="error">E       	RtlGetAppContainerNamedObjectPath [0x77067B4E+286]</span><br/><span class="error">E       	RtlGetAppContainerNamedObjectPath [0x77067B1E+238]</span><br/><br/>C:\Users\HP\AppData\Local\Programs\Python\Python311\Lib\site-packages\selenium\webdriver\support\wait.py:95: TimeoutException[gw3] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/> -----------------------------Captured stdout setup------------------------------ <br/>Headless mode
+<br/> -------------------------------Captured log call-------------------------------- <br/>INFO     Test_Search_Emp:test_empsearch.py:26 test_searchEmp_005 is started
+INFO     Test_Search_Emp:test_empsearch.py:28 Opening Browser
+INFO     Test_Search_Emp:test_empsearch.py:30 Going to Url--&gt;https://opensource-demo.orangehrmlive.com/
+INFO     Test_Search_Emp:test_empsearch.py:33 Entering UserName--&gt;Admin
+INFO     Test_Search_Emp:test_empsearch.py:35 Entering password--&gt;admin123
+INFO     Test_Search_Emp:test_empsearch.py:37 Click On login
+INFO     Test_Search_Emp:test_empsearch.py:40 Click On PIM<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_Login.py::Test_Login::test_Page_Title_001</td>
+          <td class="col-duration">11.24</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">[gw0] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/>[gw0] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw0] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw0] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/> -----------------------------Captured stdout setup------------------------------ <br/>Headless mode
+<br/> -------------------------------Captured log call-------------------------------- <br/>INFO     Test_Login:test_Login.py:18 test_Page_Title_001 is started
+INFO     Test_Login:test_Login.py:19 Opening Browser
+INFO     Test_Login:test_Login.py:21 Go to this url--&gt;https://opensource-demo.orangehrmlive.com/
+INFO     Test_Login:test_Login.py:27 test_Page_Title_001 is Passed
+INFO     Test_Login:test_Login.py:28 Page Title is--&gt;OrangeHRM
+INFO     Test_Login:test_Login.py:34 test_Page_Title_001 is completed<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_addemp.py::Test_Add_Emp::test_addEmp_003</td>
+          <td class="col-duration">25.70</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">[gw2] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/>[gw2] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw2] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw2] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/> -----------------------------Captured stdout setup------------------------------ <br/>Headless mode
+<br/> -------------------------------Captured log call-------------------------------- <br/>INFO     Test_Add_Emp:test_addemp.py:19 test_addEmp_003 is started
+INFO     Test_Add_Emp:test_addemp.py:21 Opening Browser
+INFO     Test_Add_Emp:test_addemp.py:23 Going to Url--&gt;https://opensource-demo.orangehrmlive.com/
+INFO     Test_Add_Emp:test_addemp.py:26 Entering UserName--&gt;Admin
+INFO     Test_Add_Emp:test_addemp.py:28 Entering password--&gt;admin123
+INFO     Test_Add_Emp:test_addemp.py:30 Click On login
+INFO     Test_Add_Emp:test_addemp.py:33 Click On PIM
+INFO     Test_Add_Emp:test_addemp.py:35 Click On Add
+INFO     Test_Add_Emp:test_addemp.py:38 Entering FirstName
+INFO     Test_Add_Emp:test_addemp.py:40 Entering MiddleName
+INFO     Test_Add_Emp:test_addemp.py:42 Entering LastName
+INFO     Test_Add_Emp:test_addemp.py:45 Click on Save
+INFO     Test_Add_Emp:test_addemp.py:51 Click on MenuButton
+INFO     Test_Add_Emp:test_addemp.py:53 Click on Logout Button
+INFO     Test_Add_Emp:test_addemp.py:55 test_addEmp_003 is Passed
+INFO     Test_Add_Emp:test_addemp.py:62 test_addEmp_003 is Completed<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testCases/test_Login.py::Test_Login::test_login_002</td>
+          <td class="col-duration">16.68</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">[gw1] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/>[gw1] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw1] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe[gw1] win32 -- Python 3.11.3 C:\Users\HP\AppData\Local\Programs\Python\Python311\python.exe<br/> -----------------------------Captured stdout setup------------------------------ <br/>Headless mode
+<br/> -------------------------------Captured log call-------------------------------- <br/>INFO     Test_Login:test_Login.py:46 test_login_002 is started
+INFO     Test_Login:test_Login.py:47 Opening Browser
+INFO     Test_Login:test_Login.py:49 Go to this url--&gt;https://opensource-demo.orangehrmlive.com/
+INFO     Test_Login:test_Login.py:55 Entering username--&gt;Admin
+INFO     Test_Login:test_Login.py:58 Entering password--&gt;admin123
+INFO     Test_Login:test_Login.py:61 Click on login button
+INFO     Test_Login:test_Login.py:87 Click on Menu button
+INFO     Test_Login:test_Login.py:89 Click on logout button
+INFO     Test_Login:test_Login.py:90 test_login_002 is Passed
+INFO     Test_Login:test_Login.py:99 test_login_002 is Completed<br/></div></td></tr></tbody></table></body></html>
